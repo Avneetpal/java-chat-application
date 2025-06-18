@@ -2,12 +2,14 @@ package com.chatapp.chat_server.service;
 
 import com.chatapp.chat_server.model.dto.ChatMessageDto;
 import com.chatapp.chat_server.model.entity.ChatGroup;
-import com.chatapp.chat_server.model.entity.User;
 import com.chatapp.chat_server.model.entity.Message;
+import com.chatapp.chat_server.model.entity.User;
 import com.chatapp.chat_server.repository.MessageRepository;
 import com.chatapp.chat_server.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class MessageService {
@@ -20,6 +22,9 @@ public class MessageService {
         this.userRepository = userRepository;
     }
 
+    /**
+     * This method saves a new incoming message to the database.
+     */
     @Transactional
     public Message saveMessage(ChatMessageDto.ChatMessageRequest request) {
         User sender = userRepository.findById(request.senderId())
@@ -34,5 +39,22 @@ public class MessageService {
         message.setContent(request.content());
 
         return messageRepository.save(message);
+    }
+
+    /**
+     * ADDED: This new method fetches all messages for a given group,
+     * sorted by time, and converts them to DTOs.
+     * The @Transactional annotation is important to allow access to the lazy-loaded sender.getUsername().
+     */
+    @Transactional(readOnly = true)
+    public List<ChatMessageDto.ChatMessageResponse> getMessageHistory(Long groupId) {
+        return messageRepository.findByGroupIdOrderBySentAtAsc(groupId)
+                .stream()
+                .map(message -> new ChatMessageDto.ChatMessageResponse(
+                        message.getContent(),
+                        message.getSender().getUsername(),
+                        message.getSentAt()
+                ))
+                .collect(Collectors.toList());
     }
 }

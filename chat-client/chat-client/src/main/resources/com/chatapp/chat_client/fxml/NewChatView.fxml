@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox alignment="CENTER" spacing="10" style="-fx-padding: 15;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.chatapp.chat_client.controller.NewChatController">
+    <HBox spacing="10" alignment="CENTER">
+        <TextField fx:id="searchField" promptText="Search for user..." HBox.hgrow="ALWAYS" />
+        <Button fx:id="searchButton" text="Search" onAction="#handleSearchAction" />
+    </HBox>
+    <ListView fx:id="resultsListView" VBox.vgrow="ALWAYS" />
+</VBox>
