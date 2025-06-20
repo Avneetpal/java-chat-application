@@ -20,9 +20,6 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    /**
-     * This is the definitive method for creating a new user.
-     */
     public User registerUser(String username, String password) {
         if (userRepository.findByUsername(username).isPresent()) {
             throw new IllegalArgumentException("Username already taken");

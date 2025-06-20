@@ -32,13 +32,8 @@ public class ChatGroupService {
         return chatGroupRepository.save(newGroup);
     }
 
-    /**
-     * UPDATED: This method now correctly fetches only the groups for the specified user.
-     * I've also added @Transactional, which is a good practice for service methods that read from the database.
-     */
     @Transactional(readOnly = true)
     public List<GroupDto> getAllGroupsForUser(Long userId) {
-        // This is the only line that changed: from findAll() to our new findByMembers_Id(userId)
         return chatGroupRepository.findByMembers_Id(userId)
                 .stream()
                 .map(group -> new GroupDto(
@@ -58,12 +53,56 @@ public class ChatGroupService {
 
         return chatGroupRepository.findPrivateChatGroupBetweenUsers(user1, user2)
                 .orElseGet(() -> {
-                    System.out.println("Creating new private chat between " + user1.getUsername() + " and " + user2.getUsername());
                     ChatGroup newPrivateChat = new ChatGroup();
                     newPrivateChat.setGroupName(user1.getUsername() + " & " + user2.getUsername());
                     newPrivateChat.getMembers().add(user1);
                     newPrivateChat.getMembers().add(user2);
                     return chatGroupRepository.save(newPrivateChat);
                 });
+    }
+    // Add this new method to your ChatGroupService class
+    // Add this new method to your ChatGroupService class
+
+    @Transactional
+    public ChatGroup addMembersToGroup(Long groupId, Set<Long> memberIdsToAdd) {
+        // Find the existing group
+        ChatGroup group = chatGroupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found with ID: " + groupId));
+
+        // Find all the User entities for the IDs we want to add
+        Set<User> newMembers = new HashSet<>(userRepository.findAllById(memberIdsToAdd));
+
+        // Add the new members to the group's existing member list.
+        // The Set data structure automatically handles duplicates, so we don't need to
+        // worry if a user is already in the group.
+        group.getMembers().addAll(newMembers);
+
+        // Because the 'group' entity is managed by JPA, any changes to it
+        // within a @Transactional method are automatically saved. We don't even need to call 'save()'.
+        return group;
+    }
+
+    @Transactional
+    public void removeUserFromGroup(Long groupId, Long userId) {
+        // Find the group and the user from the database
+        ChatGroup group = chatGroupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found with ID: " + groupId));
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        // Remove the user from the group's set of members
+        if (group.getMembers().contains(user)) {
+            group.getMembers().remove(user);
+
+            // If the group has no members left after removal, delete the group itself
+            if (group.getMembers().isEmpty()) {
+                chatGroupRepository.delete(group);
+            }
+            // If members still exist, the change to the members list will be saved automatically
+            // by JPA at the end of the transaction.
+        } else {
+            throw new IllegalStateException("User is not a member of this group.");
+        }
     }
 }

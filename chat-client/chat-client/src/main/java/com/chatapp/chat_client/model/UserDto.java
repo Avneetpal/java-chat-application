@@ -1,4 +1,5 @@
 package com.chatapp.chat_client.model;
+import com.chatapp.chat_client.model.UserDto;
 
 // This record must match the structure of the UserDto on the server
 public record UserDto(Long id, String username) {

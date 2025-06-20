@@ -29,7 +29,6 @@ public class ChatGroupController {
     public record CreateGroupRequest(String groupName, Set<Long> memberIds) {}
     public record DirectMessageRequest(Long currentUserId, Long targetUserId) {}
 
-
     @PostMapping("/groups")
     public ResponseEntity<GroupDto> createGroup(@RequestBody CreateGroupRequest request) {
         ChatGroup newGroup = chatGroupService.createGroup(request.groupName(), request.memberIds());
@@ -43,20 +42,12 @@ public class ChatGroupController {
 
     @GetMapping("/users/{userId}/groups")
     public ResponseEntity<List<GroupDto>> getGroupsForUser(@PathVariable Long userId) {
-        List<GroupDto> groups = chatGroupService.getAllGroupsForUser(userId);
-        return ResponseEntity.ok(groups);
+        return ResponseEntity.ok(chatGroupService.getAllGroupsForUser(userId));
     }
 
-    /**
-     * THIS IS THE FINAL FIX.
-     * The method now correctly uses the 'currentUserId' from the client's request
-     * instead of the hardcoded value '1L'.
-     */
     @PostMapping("/groups/dm")
     public ResponseEntity<GroupDto> getOrCreateDirectMessageGroup(@RequestBody DirectMessageRequest request) {
-        // The current user's ID now correctly comes from the request body.
         ChatGroup group = chatGroupService.findOrCreatePrivateChat(request.currentUserId(), request.targetUserId());
-
         GroupDto groupDto = new GroupDto(
                 group.getId(),
                 group.getGroupName(),
@@ -64,10 +55,46 @@ public class ChatGroupController {
         );
         return ResponseEntity.ok(groupDto);
     }
+    // Add this new endpoint method to your ChatGroupController class
+
+    @DeleteMapping("/groups/{groupId}/members/{userId}")
+    public ResponseEntity<Void> leaveGroup(@PathVariable Long groupId, @PathVariable Long userId) {
+        try {
+            chatGroupService.removeUserFromGroup(groupId, userId);
+            // Return 200 OK for successful operation
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            // Return 404 Not Found if the group or user doesn't exist
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            // Return 400 Bad Request if the user isn't in the group
+            return ResponseEntity.badRequest().build();
+        }
+    }
+    // Add this new record inside your ChatGroupController, with the other records
+    public record AddMembersRequest(Set<Long> memberIds) {}
+
+    // Add this new endpoint method to your ChatGroupController class
+    @PostMapping("/groups/{groupId}/members")
+    public ResponseEntity<GroupDto> addMembersToGroup(@PathVariable Long groupId, @RequestBody AddMembersRequest request) {
+        try {
+            ChatGroup updatedGroup = chatGroupService.addMembersToGroup(groupId, request.memberIds());
+
+            // Convert the updated group to a DTO to send back to the client
+            GroupDto groupDto = new GroupDto(
+                    updatedGroup.getId(),
+                    updatedGroup.getGroupName(),
+                    updatedGroup.getMembers().stream().map(User::getUsername).collect(Collectors.toSet())
+            );
+            return ResponseEntity.ok(groupDto);
+        } catch (IllegalArgumentException e) {
+            // Return 404 Not Found if the group doesn't exist
+            return ResponseEntity.notFound().build();
+        }
+    }
 
     @GetMapping("/groups/{groupId}/messages")
     public ResponseEntity<List<ChatMessageDto.ChatMessageResponse>> getMessageHistory(@PathVariable Long groupId) {
-        List<ChatMessageDto.ChatMessageResponse> history = messageService.getMessageHistory(groupId);
-        return ResponseEntity.ok(history);
+        return ResponseEntity.ok(messageService.getMessageHistory(groupId));
     }
 }

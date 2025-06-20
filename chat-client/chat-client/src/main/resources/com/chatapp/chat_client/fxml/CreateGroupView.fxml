@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+<VBox alignment="CENTER" prefHeight="400.0" prefWidth="350.0" spacing="10.0" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.chatapp.chat_client.controller.CreateGroupController">
+    <padding>
+        <Insets bottom="15.0" left="15.0" right="15.0" top="15.0" />
+    </padding>
+    <children>
+        <Label text="Create a New Group">
+            <font><Font name="System Bold" size="18.0" /></font>
+        </Label>
+        <TextField fx:id="groupNameField" promptText="Enter Group Name" />
+        <Label text="Select Members (use Ctrl-Click for multiple)" />
+        <ListView fx:id="usersListView" prefHeight="200.0" VBox.vgrow="ALWAYS" />
+        <Button fx:id="createGroupButton" onAction="#handleCreateGroupAction" prefWidth="320.0" text="Create Group" />
+        <Label fx:id="errorLabel" textFill="RED" />
+    </children>
+</VBox>
