@@ -1,6 +1,6 @@
 package com.chatapp.chat_client.controller;
 
-import com.chatapp.chat_client.model.UserDto; // <-- The required import
+import com.chatapp.chat_client.model.UserDto;
 import com.chatapp.chat_client.service.GroupService;
 import com.chatapp.chat_client.service.UserService;
 import javafx.application.Platform;
@@ -9,8 +9,7 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.stage.Stage;
-
-import java.util.List; // <-- Ensure this is also imported
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -58,12 +57,17 @@ public class CreateGroupController {
             errorLabel.setText("You must select at least one member.");
             return;
         }
+
         Set<Long> memberIds = selectedUsers.stream().map(UserDto::id).collect(Collectors.toSet());
-        memberIds.add(parentController.getCurrentUserId());
+
+        // UPDATED: Get the current user's ID to set as the owner.
+        Long ownerId = parentController.getCurrentUserId();
+        // The service layer on the backend will ensure the owner is also a member.
 
         new Thread(() -> {
             try {
-                groupService.createGroup(groupName, memberIds);
+                // UPDATED: Call the new service method with the ownerId.
+                groupService.createGroup(groupName, memberIds, ownerId);
                 Platform.runLater(() -> {
                     parentController.loadUserGroups();
                     closeWindow();

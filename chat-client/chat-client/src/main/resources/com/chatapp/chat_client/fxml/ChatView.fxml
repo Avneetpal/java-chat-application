@@ -13,13 +13,19 @@
     <left>
         <VBox prefWidth="200.0">
             <children>
-                <ListView fx:id="userListView" />
-                <HBox spacing="5.0" style="-fx-padding: 5;">
+                <ListView fx:id="userListView" VBox.vgrow="ALWAYS" />
+
+                <!--
+                  THIS IS THE FIX.
+                  The buttons are now in a VBox to stack them vertically.
+                -->
+                <VBox spacing="5.0" style="-fx-padding: 5;">
                     <children>
-                        <Button fx:id="newChatButton" onAction="#handleNewChatAction" maxWidth="Infinity" HBox.hgrow="ALWAYS" text="New Chat" />
-                        <Button fx:id="createGroupButton" onAction="#handleCreateGroupAction" maxWidth="Infinity" HBox.hgrow="ALWAYS" text="Create Group" />
+                        <Button fx:id="newChatButton" onAction="#handleNewChatAction" maxWidth="Infinity" text="New Chat" />
+                        <Button fx:id="createGroupButton" onAction="#handleCreateGroupAction" maxWidth="Infinity" text="Create Group" />
+                        <Button fx:id="logoutButton" onAction="#handleLogoutAction" maxWidth="Infinity" text="Logout" />
                     </children>
-                </HBox>
+                </VBox>
             </children>
         </VBox>
     </left>

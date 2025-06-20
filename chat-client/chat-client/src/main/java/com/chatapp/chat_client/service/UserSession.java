@@ -1,7 +1,5 @@
 package com.chatapp.chat_client.service;
 
-// This class uses the Singleton pattern to hold the logged-in user's info
-// so it can be accessed from anywhere in the application.
 public class UserSession {
 
     private static UserSession instance;
@@ -30,6 +28,9 @@ public class UserSession {
         return username;
     }
 
+    /**
+     * ADDED: This method clears the user's data upon logout.
+     */
     public void cleanUserSession() {
         userId = null;
         username = null;

@@ -50,11 +50,12 @@ public class GroupService {
         }
     }
 
-    /**
-     * This method handles creating a new group.
-     */
-    public GroupDto createGroup(String groupName, Set<Long> memberIds) throws Exception {
-        Map<String, Object> requestBody = Map.of("groupName", groupName, "memberIds", memberIds);
+    public GroupDto createGroup(String groupName, Set<Long> memberIds, Long ownerId) throws Exception {
+        Map<String, Object> requestBody = Map.of(
+                "groupName", groupName,
+                "memberIds", memberIds,
+                "ownerId", ownerId
+        );
         String jsonBody = objectMapper.writeValueAsString(requestBody);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/groups"))
@@ -66,6 +67,25 @@ public class GroupService {
             return objectMapper.readValue(response.body(), GroupDto.class);
         } else {
             throw new RuntimeException("Failed to create group");
+        }
+    }
+    // Add this new method to your client's GroupService.java
+
+    public void deleteGroup(Long groupId, Long userId) throws Exception {
+        Map<String, Long> requestBody = Map.of("userId", userId);
+        String jsonBody = objectMapper.writeValueAsString(requestBody);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/groups/" + groupId))
+                .header("Content-Type", "application/json")
+                // A DELETE request can have a body
+                .method("DELETE", HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200) {
+            throw new RuntimeException("Failed to delete group. Status: " + response.statusCode());
         }
     }
 
@@ -101,6 +121,7 @@ public class GroupService {
                 .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 200) {
+            // Note: The DTO here does not need the groupId, so a simpler TypeReference is okay.
             return objectMapper.readValue(response.body(), new TypeReference<>() {});
         } else {
             throw new RuntimeException("Failed to fetch message history.");

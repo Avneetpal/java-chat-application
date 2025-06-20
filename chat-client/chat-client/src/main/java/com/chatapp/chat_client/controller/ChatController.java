@@ -33,12 +33,13 @@ public class ChatController {
     @FXML private Button sendButton;
     @FXML private Button newChatButton;
     @FXML private Button createGroupButton;
+    @FXML private Button logoutButton;
 
     private final GroupService groupService = new GroupService();
     private final WebSocketService webSocketService = new WebSocketService();
     private final ObservableList<Node> messages = FXCollections.observableArrayList();
     private GroupDto currentGroup;
-    private ContextMenu groupContextMenu;
+    private ContextMenu contextMenu; // Renamed for clarity
 
     @FXML
     public void initialize() {
@@ -50,63 +51,122 @@ public class ChatController {
     }
 
     /**
-     * UPDATED: This method now creates a simple, elegant text layout.
-     * It relies on alignment, not background colors, to distinguish messages.
+     * UPDATED: The context menu now dynamically shows/hides items based on group ownership.
      */
-    private Node createMessageNode(ChatMessageDto.ChatMessageResponse message) {
-        // The Label will hold our message text.
-        Label messageLabel = new Label();
-        // We apply a CSS class to it to control the font style.
-        messageLabel.getStyleClass().add("message-label");
+    private void setupContextMenu() {
+        // Create all possible menu items once
+        MenuItem leaveGroupItem = new MenuItem("Leave Group");
+        leaveGroupItem.setOnAction(event -> handleLeaveGroup());
 
-        String senderName = message.senderUsername();
+        MenuItem addMemberItem = new MenuItem("Add Member");
+        addMemberItem.setOnAction(event -> handleAddMember());
 
-        // For group chats with 3+ members, show the sender's name above their message.
-        if (currentGroup != null && currentGroup.memberUsernames().size() > 2 && !senderName.equals(UserSession.getInstance().getUsername())) {
-            messageLabel.setText(senderName + ":\n" + message.content());
-        } else {
-            // For one-on-one chats, just show the content.
-            messageLabel.setText(message.content());
+        MenuItem deleteGroupItem = new MenuItem("Delete Group (Owner)");
+        deleteGroupItem.setOnAction(event -> handleDeleteGroup());
+
+        // Create the context menu and add all items
+        contextMenu = new ContextMenu();
+        contextMenu.getItems().addAll(deleteGroupItem, addMemberItem, new SeparatorMenuItem(), leaveGroupItem);
+
+        // Add a listener that runs just BEFORE the menu is shown
+        contextMenu.setOnShowing(event -> {
+            GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
+            if (selectedGroup != null) {
+                // This check is the core of the feature
+                boolean isOwner = selectedGroup.ownerId().equals(getCurrentUserId());
+
+                // Only the owner can see "Add Member" and "Delete Group"
+                addMemberItem.setVisible(isOwner);
+                deleteGroupItem.setVisible(isOwner);
+
+                // A user cannot leave a group they own (they must delete it)
+                leaveGroupItem.setVisible(!isOwner);
+            }
+        });
+
+        // Attach the context menu to the list view
+        userListView.setContextMenu(contextMenu);
+    }
+
+    /**
+     * ADDED: Handler for the new "Delete Group" menu item.
+     */
+    private void handleDeleteGroup() {
+        GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
+        if (selectedGroup == null) return;
+
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Delete Group");
+        alert.setHeaderText("Are you sure you want to permanently delete '" + selectedGroup.toString() + "'?");
+        alert.setContentText("This action cannot be undone.");
+
+        Optional<ButtonType> result = alert.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            new Thread(() -> {
+                try {
+                    groupService.deleteGroup(selectedGroup.id(), getCurrentUserId());
+                    Platform.runLater(() -> userListView.getItems().remove(selectedGroup));
+                } catch (Exception e) {
+                    Platform.runLater(() -> showErrorAlert("Error", "Failed to delete the group."));
+                }
+            }).start();
         }
+    }
 
-        // We place the label inside an HBox to control its alignment.
-        HBox messageContainer = new HBox(messageLabel);
+    // --- All other methods below are correct and unchanged ---
 
-        // Your messages align to the right. Received messages align to the left.
-        if (senderName.equals(UserSession.getInstance().getUsername())) {
-            messageContainer.setAlignment(Pos.CENTER_RIGHT);
-        } else {
-            messageContainer.setAlignment(Pos.CENTER_LEFT);
+    @FXML
+    private void handleLogoutAction() {
+        UserSession.getInstance().cleanUserSession();
+        webSocketService.disconnect();
+        Stage currentStage = (Stage) logoutButton.getScene().getWindow();
+        currentStage.close();
+        try {
+            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/LoginView.fxml"));
+            Stage loginStage = new Stage();
+            loginStage.setTitle("Chat Login");
+            loginStage.setScene(new Scene(fxmlLoader.load(), 400, 350));
+            loginStage.show();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-
-        return messageContainer;
     }
 
     @FXML
     private void handleSendMessage() {
         String content = messageTextField.getText();
         if (content.isEmpty() || currentGroup == null) { return; }
-
         Long senderId = UserSession.getInstance().getUserId();
         String senderUsername = UserSession.getInstance().getUsername();
         if (senderId == null || senderUsername == null) return;
-
-        // 1. Create DTO for immediate display
         ChatMessageDto.ChatMessageResponse messageForDisplay = new ChatMessageDto.ChatMessageResponse(
                 currentGroup.id(), content, senderUsername, Instant.now()
         );
-        // 2. Add to our own screen right away
         messages.add(createMessageNode(messageForDisplay));
         messageListView.scrollTo(messages.size() - 1);
-
-        // 3. Create DTO to send to server
         ChatMessageDto.ChatMessageRequest messageForServer = new ChatMessageDto.ChatMessageRequest(
                 currentGroup.id(), senderId, content
         );
-        // 4. Send to server
         webSocketService.sendMessage("/app/chat.sendMessage", messageForServer);
-
         messageTextField.clear();
+    }
+
+    private Node createMessageNode(ChatMessageDto.ChatMessageResponse message) {
+        Label messageLabel = new Label();
+        messageLabel.getStyleClass().add("message-label");
+        String senderName = message.senderUsername();
+        if (currentGroup != null && currentGroup.memberUsernames().size() > 2 && !senderName.equals(UserSession.getInstance().getUsername())) {
+            messageLabel.setText(senderName + ":\n" + message.content());
+        } else {
+            messageLabel.setText(message.content());
+        }
+        HBox messageContainer = new HBox(messageLabel);
+        if (senderName.equals(UserSession.getInstance().getUsername())) {
+            messageContainer.setAlignment(Pos.CENTER_RIGHT);
+        } else {
+            messageContainer.setAlignment(Pos.CENTER_LEFT);
+        }
+        return messageContainer;
     }
 
     private void onMessageReceived(ChatMessageDto.ChatMessageResponse message) {
@@ -137,29 +197,6 @@ public class ChatController {
                 e.printStackTrace();
             }
         }).start();
-    }
-
-    // --- All other methods below are for setup and remain unchanged ---
-
-    private void setupContextMenu() {
-        groupContextMenu = new ContextMenu();
-        MenuItem leaveGroupItem = new MenuItem("Leave Group");
-        leaveGroupItem.setOnAction(event -> handleLeaveGroup());
-        MenuItem addMemberItem = new MenuItem("Add Member");
-        addMemberItem.setOnAction(event -> handleAddMember());
-        groupContextMenu.getItems().addAll(leaveGroupItem, addMemberItem);
-        userListView.setOnMouseClicked(event -> {
-            if (event.getButton() == MouseButton.SECONDARY) {
-                GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
-                if (selectedGroup != null && selectedGroup.memberUsernames().size() > 2) {
-                    groupContextMenu.show(userListView, event.getScreenX(), event.getScreenY());
-                } else {
-                    groupContextMenu.hide();
-                }
-            } else {
-                groupContextMenu.hide();
-            }
-        });
     }
 
     private void handleLeaveGroup() {

@@ -24,11 +24,19 @@ public class ChatGroupService {
         this.userRepository = userRepository;
     }
 
-    public ChatGroup createGroup(String groupName, Set<Long> memberIds) {
+    @Transactional
+    public ChatGroup createGroup(String groupName, Set<Long> memberIds, Long ownerId) {
+        User owner = userRepository.findById(ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("Owner with ID " + ownerId + " not found"));
+
         Set<User> members = new HashSet<>(userRepository.findAllById(memberIds));
+        members.add(owner);
+
         ChatGroup newGroup = new ChatGroup();
         newGroup.setGroupName(groupName);
         newGroup.setMembers(members);
+        newGroup.setOwner(owner);
+
         return chatGroupRepository.save(newGroup);
     }
 
@@ -39,7 +47,8 @@ public class ChatGroupService {
                 .map(group -> new GroupDto(
                         group.getId(),
                         group.getGroupName(),
-                        group.getMembers().stream().map(User::getUsername).collect(Collectors.toSet())
+                        group.getMembers().stream().map(User::getUsername).collect(Collectors.toSet()),
+                        group.getOwner().getId() // UPDATED: Now includes the owner's ID in the DTO
                 ))
                 .collect(Collectors.toList());
     }
@@ -55,52 +64,54 @@ public class ChatGroupService {
                 .orElseGet(() -> {
                     ChatGroup newPrivateChat = new ChatGroup();
                     newPrivateChat.setGroupName(user1.getUsername() + " & " + user2.getUsername());
-                    newPrivateChat.getMembers().add(user1);
-                    newPrivateChat.getMembers().add(user2);
+                    newPrivateChat.setMembers(Set.of(user1, user2));
+                    newPrivateChat.setOwner(user1); // UPDATED: Sets the initiator as the owner of the new DM
                     return chatGroupRepository.save(newPrivateChat);
                 });
     }
     // Add this new method to your ChatGroupService class
-    // Add this new method to your ChatGroupService class
 
     @Transactional
-    public ChatGroup addMembersToGroup(Long groupId, Set<Long> memberIdsToAdd) {
-        // Find the existing group
+    public void deleteGroup(Long groupId, Long requestingUserId) {
+        // Find the group to be deleted
         ChatGroup group = chatGroupRepository.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found with ID: " + groupId));
 
-        // Find all the User entities for the IDs we want to add
-        Set<User> newMembers = new HashSet<>(userRepository.findAllById(memberIdsToAdd));
+        // IMPORTANT: Verify that the user requesting the deletion is the actual owner
+        if (!group.getOwner().getId().equals(requestingUserId)) {
+            throw new IllegalStateException("Only the group owner can delete this group.");
+        }
 
-        // Add the new members to the group's existing member list.
-        // The Set data structure automatically handles duplicates, so we don't need to
-        // worry if a user is already in the group.
+        // If the check passes, delete the group.
+        // Due to cascading settings, this should also remove related memberships and messages.
+        chatGroupRepository.delete(group);
+    }
+
+    @Transactional
+    public ChatGroup addMembersToGroup(Long groupId, Set<Long> memberIdsToAdd) {
+        ChatGroup group = chatGroupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found with ID: " + groupId));
+
+        Set<User> newMembers = new HashSet<>(userRepository.findAllById(memberIdsToAdd));
         group.getMembers().addAll(newMembers);
 
-        // Because the 'group' entity is managed by JPA, any changes to it
-        // within a @Transactional method are automatically saved. We don't even need to call 'save()'.
         return group;
     }
 
     @Transactional
     public void removeUserFromGroup(Long groupId, Long userId) {
-        // Find the group and the user from the database
         ChatGroup group = chatGroupRepository.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found with ID: " + groupId));
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
 
-        // Remove the user from the group's set of members
         if (group.getMembers().contains(user)) {
             group.getMembers().remove(user);
 
-            // If the group has no members left after removal, delete the group itself
             if (group.getMembers().isEmpty()) {
                 chatGroupRepository.delete(group);
             }
-            // If members still exist, the change to the members list will be saved automatically
-            // by JPA at the end of the transaction.
         } else {
             throw new IllegalStateException("User is not a member of this group.");
         }

@@ -9,7 +9,7 @@ import com.chatapp.chat_server.service.MessageService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.web.bind.annotation.DeleteMapping;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -26,67 +26,87 @@ public class ChatGroupController {
         this.messageService = messageService;
     }
 
-    public record CreateGroupRequest(String groupName, Set<Long> memberIds) {}
+    // UPDATED: Request record now includes the ownerId
+    public record CreateGroupRequest(String groupName, Set<Long> memberIds, Long ownerId) {}
     public record DirectMessageRequest(Long currentUserId, Long targetUserId) {}
+    public record AddMembersRequest(Set<Long> memberIds) {}
+
 
     @PostMapping("/groups")
     public ResponseEntity<GroupDto> createGroup(@RequestBody CreateGroupRequest request) {
-        ChatGroup newGroup = chatGroupService.createGroup(request.groupName(), request.memberIds());
+        // UPDATED: Pass the ownerId to the service method
+        ChatGroup newGroup = chatGroupService.createGroup(request.groupName(), request.memberIds(), request.ownerId());
+
+        // UPDATED: The DTO now includes the owner's ID
         GroupDto groupDto = new GroupDto(
                 newGroup.getId(),
                 newGroup.getGroupName(),
-                newGroup.getMembers().stream().map(User::getUsername).collect(Collectors.toSet())
+                newGroup.getMembers().stream().map(User::getUsername).collect(Collectors.toSet()),
+                newGroup.getOwner().getId()
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(groupDto);
     }
 
     @GetMapping("/users/{userId}/groups")
     public ResponseEntity<List<GroupDto>> getGroupsForUser(@PathVariable Long userId) {
+        // This method is now correct because the service it calls was already updated
         return ResponseEntity.ok(chatGroupService.getAllGroupsForUser(userId));
     }
 
     @PostMapping("/groups/dm")
     public ResponseEntity<GroupDto> getOrCreateDirectMessageGroup(@RequestBody DirectMessageRequest request) {
         ChatGroup group = chatGroupService.findOrCreatePrivateChat(request.currentUserId(), request.targetUserId());
+
+        // UPDATED: The DTO now includes the owner's ID
         GroupDto groupDto = new GroupDto(
                 group.getId(),
                 group.getGroupName(),
-                group.getMembers().stream().map(User::getUsername).collect(Collectors.toSet())
+                group.getMembers().stream().map(User::getUsername).collect(Collectors.toSet()),
+                group.getOwner().getId()
         );
         return ResponseEntity.ok(groupDto);
     }
-    // Add this new endpoint method to your ChatGroupController class
 
     @DeleteMapping("/groups/{groupId}/members/{userId}")
     public ResponseEntity<Void> leaveGroup(@PathVariable Long groupId, @PathVariable Long userId) {
         try {
             chatGroupService.removeUserFromGroup(groupId, userId);
-            // Return 200 OK for successful operation
             return ResponseEntity.ok().build();
-        } catch (IllegalArgumentException e) {
-            // Return 404 Not Found if the group or user doesn't exist
-            return ResponseEntity.notFound().build();
-        } catch (IllegalStateException e) {
-            // Return 400 Bad Request if the user isn't in the group
+        } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().build();
         }
     }
-    // Add this new record inside your ChatGroupController, with the other records
-    public record AddMembersRequest(Set<Long> memberIds) {}
 
-    // Add this new endpoint method to your ChatGroupController class
     @PostMapping("/groups/{groupId}/members")
     public ResponseEntity<GroupDto> addMembersToGroup(@PathVariable Long groupId, @RequestBody AddMembersRequest request) {
         try {
             ChatGroup updatedGroup = chatGroupService.addMembersToGroup(groupId, request.memberIds());
 
-            // Convert the updated group to a DTO to send back to the client
+            // UPDATED: The DTO now includes the owner's ID
             GroupDto groupDto = new GroupDto(
                     updatedGroup.getId(),
                     updatedGroup.getGroupName(),
-                    updatedGroup.getMembers().stream().map(User::getUsername).collect(Collectors.toSet())
+                    updatedGroup.getMembers().stream().map(User::getUsername).collect(Collectors.toSet()),
+                    updatedGroup.getOwner().getId()
             );
             return ResponseEntity.ok(groupDto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    // Add this new record inside your ChatGroupController, with the other records
+    public record DeleteGroupRequest(Long userId) {}
+
+
+    // Add this new endpoint method to your ChatGroupController class
+    @DeleteMapping("/groups/{groupId}")
+    public ResponseEntity<Void> deleteGroup(@PathVariable Long groupId, @RequestBody DeleteGroupRequest request) {
+        try {
+            chatGroupService.deleteGroup(groupId, request.userId());
+            return ResponseEntity.ok().build(); // Return 200 OK on success
+        } catch (IllegalStateException e) {
+            // Return 403 Forbidden if the user is not the owner
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         } catch (IllegalArgumentException e) {
             // Return 404 Not Found if the group doesn't exist
             return ResponseEntity.notFound().build();
