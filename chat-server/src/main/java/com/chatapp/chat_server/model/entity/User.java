@@ -1,7 +1,8 @@
 package com.chatapp.chat_server.model.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -14,36 +15,36 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(nullable = false, unique = true)
     private String username;
 
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
+    // This is the single source of truth. The column will be named 'password'.
+    @Column(name = "password", nullable = false, length = 255)
+    private String password;
 
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+
     @ManyToMany(mappedBy = "members")
-    @JsonIgnore
-    private Set<ChatGroup> groups = new HashSet<>();
+    private Set<ChatGroup> chatGroups = new HashSet<>();
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = Instant.now();
-    }
+    // --- Getters and Setters ---
 
-    public User() {
-    }
-
-    // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
-    public String getPasswordHash() { return passwordHash; }
-    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
-    public Set<ChatGroup> getGroups() { return groups; }
-    public void setGroups(Set<ChatGroup> groups) { this.groups = groups; }
+    public Instant getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+    public Set<ChatGroup> getChatGroups() { return chatGroups; }
+    public void setChatGroups(Set<ChatGroup> chatGroups) { this.chatGroups = chatGroups; }
 }

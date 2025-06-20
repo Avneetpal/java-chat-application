@@ -22,5 +22,7 @@
     <TextField fx:id="usernameField" promptText="Username" />
     <PasswordField fx:id="passwordField" promptText="Password" />
     <Button fx:id="loginButton" onAction="#handleLoginButtonAction" prefWidth="100.0" text="Login" />
-    <Hyperlink onAction="#handleRegisterLinkClick" text="Don't have an account? Register" />
+
+    <Hyperlink fx:id="registerLink" onAction="#handleRegisterLinkClick" text="Don't have an account? Register" />
+
 </VBox>

@@ -23,14 +23,10 @@ public class LoginController {
     @FXML private PasswordField passwordField;
     @FXML private Button loginButton;
     @FXML private Label errorLabel;
-    @FXML private Hyperlink registerLink; // The fx:id for the hyperlink in the FXML
+    @FXML private Hyperlink registerLink;
 
     private final AuthService authService = new AuthService();
 
-    /**
-     * This is the updated method for handling the login button click.
-     * It now correctly handles the JSON response from the server.
-     */
     @FXML
     private void handleLoginButtonAction() {
         String username = usernameField.getText();
@@ -39,29 +35,33 @@ public class LoginController {
 
         new Thread(() -> {
             try {
-                // AuthService.login() now returns a String (the JSON body) or null
                 String responseBody = authService.login(username, password);
+
+                // --- ADDED DEBUG LINE 1 ---
+                // This will show us exactly what the server sends back after a successful login.
+                System.out.println("DEBUG: Server Login Response Body: " + responseBody);
 
                 Platform.runLater(() -> {
                     if (responseBody != null) {
                         try {
-                            // Use ObjectMapper to parse the JSON string
                             ObjectMapper objectMapper = new ObjectMapper();
                             JsonNode responseJson = objectMapper.readTree(responseBody);
-                            long userId = responseJson.get("userId").asLong();
 
-                            // Save the logged-in user's info to our session manager
+                            long userId = responseJson.get("id").asLong();
+
                             UserSession.getInstance().setLoggedInUser(userId, username);
 
-                            System.out.println("Login Successful! Navigating to chat view...");
-                            navigateToChatView();
+                            // --- ADDED DEBUG LINE 2 ---
+                            // This will show us what ID and username the client thinks is logged in.
+                            System.out.println("DEBUG: UserSession has been set with ID: " + UserSession.getInstance().getUserId() + ", Username: " + UserSession.getInstance().getUsername());
 
+                            navigateToChatView();
                         } catch (IOException e) {
                             errorLabel.setText("Error: Failed to process server response.");
                             e.printStackTrace();
                         }
                     } else {
-                        errorLabel.setText("Login failed. Please check your credentials.");
+                        errorLabel.setText("Login failed. Please check credentials.");
                     }
                 });
             } catch (Exception e) {
@@ -71,36 +71,34 @@ public class LoginController {
         }).start();
     }
 
-    /**
-     * This method handles the click on the "Register" hyperlink.
-     */
-    @FXML
-    private void handleRegisterLinkClick() {
+    private void navigateToChatView() {
         try {
-            // Get the current window (stage) to switch its content
-            Stage stage = (Stage) errorLabel.getScene().getWindow();
-            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/RegisterView.fxml"));
-            stage.setScene(new Scene(fxmlLoader.load(), 400, 350));
+            Stage loginStage = (Stage) loginButton.getScene().getWindow();
+            loginStage.close();
+
+            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/ChatView.fxml"));
+            Scene scene = new Scene(fxmlLoader.load(), 800, 600);
+
+            ChatController chatController = fxmlLoader.getController();
+            chatController.initData();
+
+            Stage chatStage = new Stage();
+            chatStage.setTitle("Chat Application");
+            chatStage.setScene(scene);
+            chatStage.show();
+
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    /**
-     * Helper method to navigate to the chat window.
-     */
-    private void navigateToChatView() {
-        try {
-            // Close the current login window
-            Stage loginStage = (Stage) loginButton.getScene().getWindow();
-            loginStage.close();
 
-            // Load and show the new chat window
-            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/ChatView.fxml"));
-            Stage chatStage = new Stage();
-            chatStage.setTitle("Chat");
-            chatStage.setScene(new Scene(fxmlLoader.load(), 800, 600));
-            chatStage.show();
+    @FXML
+    private void handleRegisterLinkClick() {
+        try {
+            Stage stage = (Stage) registerLink.getScene().getWindow();
+            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/RegisterView.fxml"));
+            stage.setScene(new Scene(fxmlLoader.load(), 400, 350));
         } catch (IOException e) {
             e.printStackTrace();
         }

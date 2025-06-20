@@ -17,11 +17,13 @@ public class GroupService {
     private final HttpClient client = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    private final String baseUrl = "http://localhost:8080/api/groups";
+    // Note: We will construct the full URL in each method now, so baseUrl is just for reference
+    private final String baseUrl = "http://localhost:8080/api";
 
     public List<GroupDto> getUserGroups(Long userId) throws Exception {
+        // CORRECTED: The URL now correctly points to the /api/users/{id}/groups endpoint
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/user/" + userId))
+                .uri(URI.create(baseUrl + "/users/" + userId + "/groups"))
                 .header("Content-Type", "application/json")
                 .GET()
                 .build();
@@ -31,24 +33,19 @@ public class GroupService {
         if (response.statusCode() == 200) {
             return objectMapper.readValue(response.body(), new TypeReference<>() {});
         } else {
-            throw new RuntimeException("Failed to fetch groups");
+            throw new RuntimeException("Failed to fetch groups. Status: " + response.statusCode());
         }
     }
 
-    /**
-     * UPDATED: The method signature now correctly accepts both user IDs.
-     */
     public GroupDto startDirectMessage(Long currentUserId, Long targetUserId) throws Exception {
-        // Create the JSON body with both IDs
         Map<String, Long> requestBody = Map.of(
                 "currentUserId", currentUserId,
                 "targetUserId", targetUserId
         );
         String jsonBody = objectMapper.writeValueAsString(requestBody);
 
-        // Build the POST request to the /dm endpoint
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/dm"))
+                .uri(URI.create(baseUrl + "/groups/dm"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                 .build();
@@ -62,9 +59,10 @@ public class GroupService {
         }
     }
 
+
     public List<ChatMessageDto.ChatMessageResponse> getMessageHistory(Long groupId) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/" + groupId + "/messages"))
+                .uri(URI.create(baseUrl + "/groups/" + groupId + "/messages"))
                 .header("Content-Type", "application/json")
                 .GET()
                 .build();
@@ -74,7 +72,7 @@ public class GroupService {
         if (response.statusCode() == 200) {
             return objectMapper.readValue(response.body(), new TypeReference<>() {});
         } else {
-            throw new RuntimeException("Failed to fetch message history");
+            throw new RuntimeException("Failed to fetch message history. Status: " + response.statusCode());
         }
     }
 }

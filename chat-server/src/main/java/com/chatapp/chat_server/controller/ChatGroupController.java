@@ -6,7 +6,6 @@ import com.chatapp.chat_server.model.entity.ChatGroup;
 import com.chatapp.chat_server.model.entity.User;
 import com.chatapp.chat_server.service.ChatGroupService;
 import com.chatapp.chat_server.service.MessageService;
-import com.chatapp.chat_server.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,7 +15,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api") // Changed base path for clarity
+@RequestMapping("/api")
 public class ChatGroupController {
 
     private final ChatGroupService chatGroupService;
@@ -27,12 +26,10 @@ public class ChatGroupController {
         this.messageService = messageService;
     }
 
-    // --- DTOs for Requests ---
     public record CreateGroupRequest(String groupName, Set<Long> memberIds) {}
-    public record DirectMessageRequest(Long targetUserId) {}
+    public record DirectMessageRequest(Long currentUserId, Long targetUserId) {}
 
 
-    // --- Group Endpoints ---
     @PostMapping("/groups")
     public ResponseEntity<GroupDto> createGroup(@RequestBody CreateGroupRequest request) {
         ChatGroup newGroup = chatGroupService.createGroup(request.groupName(), request.memberIds());
@@ -50,11 +47,16 @@ public class ChatGroupController {
         return ResponseEntity.ok(groups);
     }
 
+    /**
+     * THIS IS THE FINAL FIX.
+     * The method now correctly uses the 'currentUserId' from the client's request
+     * instead of the hardcoded value '1L'.
+     */
     @PostMapping("/groups/dm")
     public ResponseEntity<GroupDto> getOrCreateDirectMessageGroup(@RequestBody DirectMessageRequest request) {
-        // Placeholder for the currently logged-in user's ID.
-        Long currentUserId = 1L;
-        ChatGroup group = chatGroupService.findOrCreatePrivateChat(currentUserId, request.targetUserId());
+        // The current user's ID now correctly comes from the request body.
+        ChatGroup group = chatGroupService.findOrCreatePrivateChat(request.currentUserId(), request.targetUserId());
+
         GroupDto groupDto = new GroupDto(
                 group.getId(),
                 group.getGroupName(),
@@ -63,9 +65,9 @@ public class ChatGroupController {
         return ResponseEntity.ok(groupDto);
     }
 
-    // --- Message History Endpoint ---
     @GetMapping("/groups/{groupId}/messages")
     public ResponseEntity<List<ChatMessageDto.ChatMessageResponse>> getMessageHistory(@PathVariable Long groupId) {
-        return ResponseEntity.ok(messageService.getMessageHistory(groupId));
+        List<ChatMessageDto.ChatMessageResponse> history = messageService.getMessageHistory(groupId);
+        return ResponseEntity.ok(history);
     }
 }

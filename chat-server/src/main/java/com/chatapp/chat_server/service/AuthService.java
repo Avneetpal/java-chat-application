@@ -16,21 +16,11 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    public User registerUser(String username, String password) {
-        if (userRepository.findByUsername(username).isPresent()) {
-            throw new IllegalStateException("Username already taken");
-        }
-        User newUser = new User();
-        newUser.setUsername(username);
-        newUser.setPasswordHash(passwordEncoder.encode(password));
-        return userRepository.save(newUser);
-    }
-
     public User loginUser(String username, String password) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalStateException("Invalid username or password"));
 
-        if (passwordEncoder.matches(password, user.getPasswordHash())) {
+        if (passwordEncoder.matches(password, user.getPassword())) {
             return user;
         } else {
             throw new IllegalStateException("Invalid username or password");

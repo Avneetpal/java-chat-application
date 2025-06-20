@@ -18,7 +18,6 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
-
 import java.io.IOException;
 import java.util.List;
 
@@ -39,9 +38,12 @@ public class ChatController {
     public void initialize() {
         messageListView.setItems(messages);
         connectAndCheckStatus();
-        loadUserGroups();
         setupGroupSelectionListener();
         sendButton.setOnAction(event -> handleSendMessage());
+    }
+
+    public void initData() {
+        loadUserGroups();
     }
 
     @FXML
@@ -91,7 +93,7 @@ public class ChatController {
                 Platform.runLater(() -> {
                     messages.clear();
                     for (ChatMessageDto.ChatMessageResponse msg : history) {
-                        String formattedMessage = msg.senderUsername() + ": " + msg.content();
+                        String formattedMessage = (msg.senderUsername() != null ? msg.senderUsername() : "Unknown") + ": " + msg.content();
                         messages.add(formattedMessage);
                     }
                 });
@@ -119,7 +121,7 @@ public class ChatController {
 
     private void onMessageReceived(ChatMessageDto.ChatMessageResponse message) {
         Platform.runLater(() -> {
-            String formattedMessage = message.senderUsername() + ": " + message.content();
+            String formattedMessage = (message.senderUsername() != null ? message.senderUsername() : "Unknown") + ": " + message.content();
             messages.add(formattedMessage);
         });
     }
@@ -128,6 +130,11 @@ public class ChatController {
         new Thread(() -> {
             try {
                 Long userId = UserSession.getInstance().getUserId();
+
+                // --- ADDED DEBUG LINE 3 ---
+                // This will show us which user's chats this window is trying to load.
+                System.out.println("DEBUG: ChatController is now fetching groups for userId: " + userId);
+
                 if (userId != null) {
                     final List<GroupDto> groups = groupService.getUserGroups(userId);
                     Platform.runLater(() -> userListView.setItems(FXCollections.observableArrayList(groups)));
@@ -138,28 +145,13 @@ public class ChatController {
         }).start();
     }
 
-    /**
-     * ADDED: This new public method allows the NewChatController to select a group.
-     */
-    public void selectAndFocusGroup(GroupDto groupToSelect) {
-        // Refresh the entire list first to ensure the new group is present
-        loadUserGroups();
-
-        // We use Platform.runLater to give the UI a moment to update from the background thread.
-        Platform.runLater(() -> {
-            // A small delay helps ensure the ListView has rendered its new items
-            // before we try to select one.
-            try {
-                Thread.sleep(150); // wait 150 milliseconds
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                e.printStackTrace();
-            }
-            // Programmatically select the new group
-            userListView.getSelectionModel().select(groupToSelect);
-            userListView.scrollTo(groupToSelect);
-            userListView.requestFocus();
-        });
+    public void addNewGroupAndSelect(GroupDto newGroup) {
+        if (!userListView.getItems().contains(newGroup)) {
+            userListView.getItems().add(newGroup);
+        }
+        userListView.getSelectionModel().select(newGroup);
+        userListView.scrollTo(newGroup);
+        userListView.requestFocus();
     }
 
     private void showErrorAlert(String title, String content) {

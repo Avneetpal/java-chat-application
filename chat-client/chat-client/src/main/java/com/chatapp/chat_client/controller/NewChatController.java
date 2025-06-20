@@ -57,23 +57,19 @@ public class NewChatController {
     /**
      * UPDATED: This method now calls the new 'selectAndFocusGroup' method on the parent controller.
      */
+    // This is the UPDATED method in NewChatController.java
     private void startChatWithUser(UserDto user) {
         new Thread(() -> {
             try {
-                // Get the logged-in user's ID from our session manager
                 Long currentUserId = UserSession.getInstance().getUserId();
-                if(currentUserId == null) {
-                    System.err.println("Error: No user is logged in.");
-                    return;
-                }
+                if(currentUserId == null) { return; }
 
-                // 1. Call the service and CAPTURE the new group DTO it returns
+                // 1. Call the service and get the newly created group DTO
                 final GroupDto newGroup = groupService.startDirectMessage(currentUserId, user.id());
 
                 Platform.runLater(() -> {
-                    // 2. Instead of just refreshing, call the NEW method on the parent
-                    //    and pass the new group to it so it can be automatically selected.
-                    parentController.selectAndFocusGroup(newGroup);
+                    // 2. Call the new, simpler method on the parent controller
+                    parentController.addNewGroupAndSelect(newGroup);
 
                     // 3. Close this pop-up window
                     ((Stage) searchButton.getScene().getWindow()).close();
