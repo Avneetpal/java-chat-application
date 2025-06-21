@@ -39,81 +39,74 @@ public class ChatController {
     private final WebSocketService webSocketService = new WebSocketService();
     private final ObservableList<Node> messages = FXCollections.observableArrayList();
     private GroupDto currentGroup;
-    private ContextMenu contextMenu; // Renamed for clarity
+    private ContextMenu contextMenu;
 
     @FXML
     public void initialize() {
         messageListView.setItems(messages);
         connectAndCheckStatus();
         setupGroupSelectionListener();
-        sendButton.setOnAction(event -> handleSendMessage());
+        // The onAction is now handled in the FXML, so this line is not needed
+        // sendButton.setOnAction(event -> handleSendMessage());
         setupContextMenu();
     }
 
-    /**
-     * UPDATED: The context menu now dynamically shows/hides items based on group ownership.
-     */
+    public void initData() {
+        loadUserGroups();
+    }
+
     private void setupContextMenu() {
-        // Create all possible menu items once
+        contextMenu = new ContextMenu();
         MenuItem leaveGroupItem = new MenuItem("Leave Group");
-        leaveGroupItem.setOnAction(event -> handleLeaveGroup());
-
         MenuItem addMemberItem = new MenuItem("Add Member");
-        addMemberItem.setOnAction(event -> handleAddMember());
-
         MenuItem deleteGroupItem = new MenuItem("Delete Group (Owner)");
+
+        leaveGroupItem.setOnAction(event -> handleLeaveGroup());
+        addMemberItem.setOnAction(event -> handleAddMember());
         deleteGroupItem.setOnAction(event -> handleDeleteGroup());
 
-        // Create the context menu and add all items
-        contextMenu = new ContextMenu();
         contextMenu.getItems().addAll(deleteGroupItem, addMemberItem, new SeparatorMenuItem(), leaveGroupItem);
 
-        // Add a listener that runs just BEFORE the menu is shown
-        contextMenu.setOnShowing(event -> {
-            GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
-            if (selectedGroup != null) {
-                // This check is the core of the feature
-                boolean isOwner = selectedGroup.ownerId().equals(getCurrentUserId());
+        userListView.setOnMouseClicked(event -> {
+            contextMenu.hide();
 
-                // Only the owner can see "Add Member" and "Delete Group"
-                addMemberItem.setVisible(isOwner);
-                deleteGroupItem.setVisible(isOwner);
+            if (event.getButton() == MouseButton.SECONDARY) {
+                GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
 
-                // A user cannot leave a group they own (they must delete it)
-                leaveGroupItem.setVisible(!isOwner);
+                if (selectedGroup != null && selectedGroup.memberUsernames().size() > 2) {
+                    boolean isOwner = selectedGroup.ownerId().equals(getCurrentUserId());
+
+                    deleteGroupItem.setVisible(isOwner);
+                    addMemberItem.setVisible(isOwner);
+                    leaveGroupItem.setVisible(!isOwner);
+
+                    contextMenu.show(userListView, event.getScreenX(), event.getScreenY());
+                }
             }
         });
-
-        // Attach the context menu to the list view
-        userListView.setContextMenu(contextMenu);
     }
 
-    /**
-     * ADDED: Handler for the new "Delete Group" menu item.
-     */
-    private void handleDeleteGroup() {
-        GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
-        if (selectedGroup == null) return;
+    @FXML
+    private void handleSendMessage() {
+        String content = messageTextField.getText();
+        if (content.isEmpty() || currentGroup == null) { return; }
 
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Delete Group");
-        alert.setHeaderText("Are you sure you want to permanently delete '" + selectedGroup.toString() + "'?");
-        alert.setContentText("This action cannot be undone.");
+        Long senderId = UserSession.getInstance().getUserId();
+        String senderUsername = UserSession.getInstance().getUsername();
+        if (senderId == null || senderUsername == null) return;
 
-        Optional<ButtonType> result = alert.showAndWait();
-        if (result.isPresent() && result.get() == ButtonType.OK) {
-            new Thread(() -> {
-                try {
-                    groupService.deleteGroup(selectedGroup.id(), getCurrentUserId());
-                    Platform.runLater(() -> userListView.getItems().remove(selectedGroup));
-                } catch (Exception e) {
-                    Platform.runLater(() -> showErrorAlert("Error", "Failed to delete the group."));
-                }
-            }).start();
-        }
+        ChatMessageDto.ChatMessageResponse messageForDisplay = new ChatMessageDto.ChatMessageResponse(
+                currentGroup.id(), content, senderUsername, Instant.now()
+        );
+        messages.add(createMessageNode(messageForDisplay));
+        messageListView.scrollTo(messages.size() - 1);
+
+        ChatMessageDto.ChatMessageRequest messageForServer = new ChatMessageDto.ChatMessageRequest(
+                currentGroup.id(), senderId, content
+        );
+        webSocketService.sendMessage("/app/chat.sendMessage", messageForServer);
+        messageTextField.clear();
     }
-
-    // --- All other methods below are correct and unchanged ---
 
     @FXML
     private void handleLogoutAction() {
@@ -133,22 +126,102 @@ public class ChatController {
     }
 
     @FXML
-    private void handleSendMessage() {
-        String content = messageTextField.getText();
-        if (content.isEmpty() || currentGroup == null) { return; }
-        Long senderId = UserSession.getInstance().getUserId();
-        String senderUsername = UserSession.getInstance().getUsername();
-        if (senderId == null || senderUsername == null) return;
-        ChatMessageDto.ChatMessageResponse messageForDisplay = new ChatMessageDto.ChatMessageResponse(
-                currentGroup.id(), content, senderUsername, Instant.now()
-        );
-        messages.add(createMessageNode(messageForDisplay));
-        messageListView.scrollTo(messages.size() - 1);
-        ChatMessageDto.ChatMessageRequest messageForServer = new ChatMessageDto.ChatMessageRequest(
-                currentGroup.id(), senderId, content
-        );
-        webSocketService.sendMessage("/app/chat.sendMessage", messageForServer);
-        messageTextField.clear();
+    private void handleNewChatAction() {
+        try {
+            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/NewChatView.fxml"));
+            Stage stage = new Stage();
+            stage.setTitle("Start New Chat");
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.setScene(new Scene(fxmlLoader.load(), 400, 500));
+            NewChatController newChatController = fxmlLoader.getController();
+            newChatController.setParentController(this);
+            stage.showAndWait();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
+    private void handleCreateGroupAction() {
+        try {
+            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/CreateGroupView.fxml"));
+            Stage stage = new Stage();
+            stage.setTitle("Create New Group");
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.setScene(new Scene(fxmlLoader.load(), 350, 400));
+            CreateGroupController createGroupController = fxmlLoader.getController();
+            createGroupController.setParentController(this);
+            stage.showAndWait();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void handleDeleteGroup() {
+        GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
+        if (selectedGroup == null) return;
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Delete Group");
+        alert.setHeaderText("Are you sure you want to permanently delete '" + selectedGroup.toString() + "'?");
+        alert.setContentText("This action cannot be undone.");
+        Optional<ButtonType> result = alert.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            new Thread(() -> {
+                try {
+                    groupService.deleteGroup(selectedGroup.id(), getCurrentUserId());
+                    Platform.runLater(() -> userListView.getItems().remove(selectedGroup));
+                } catch (Exception e) {
+                    Platform.runLater(() -> showErrorAlert("Error", "Failed to delete the group."));
+                }
+            }).start();
+        }
+    }
+
+    private void handleLeaveGroup() {
+        GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
+        if (selectedGroup == null) return;
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Leave Group");
+        alert.setHeaderText("Are you sure you want to leave the group '" + selectedGroup.toString() + "'?");
+        Optional<ButtonType> result = alert.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            leaveSelectedGroup(selectedGroup);
+        }
+    }
+
+    private void handleAddMember() {
+        GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
+        if (selectedGroup != null) {
+            openAddMemberDialog(selectedGroup);
+        }
+    }
+
+    private void openAddMemberDialog(GroupDto group) {
+        try {
+            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/AddMemberView.fxml"));
+            Stage stage = new Stage();
+            stage.setTitle("Add Members");
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.setScene(new Scene(fxmlLoader.load(), 350, 400));
+            AddMemberController addMemberController = fxmlLoader.getController();
+            addMemberController.initData(group);
+            stage.showAndWait();
+        } catch (IOException e) {
+            e.printStackTrace();
+            showErrorAlert("UI Error", "Could not open the Add Member window.");
+        }
+    }
+
+    private void leaveSelectedGroup(GroupDto groupToLeave) {
+        new Thread(() -> {
+            try {
+                groupService.leaveGroup(groupToLeave.id(), getCurrentUserId());
+                Platform.runLater(() -> userListView.getItems().remove(groupToLeave));
+            } catch (Exception e) {
+                e.printStackTrace();
+                Platform.runLater(() -> showErrorAlert("Error", "Failed to leave the group."));
+            }
+        }).start();
     }
 
     private Node createMessageNode(ChatMessageDto.ChatMessageResponse message) {
@@ -197,90 +270,6 @@ public class ChatController {
                 e.printStackTrace();
             }
         }).start();
-    }
-
-    private void handleLeaveGroup() {
-        GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
-        if (selectedGroup == null) return;
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Leave Group");
-        alert.setHeaderText("Are you sure you want to leave the group '" + selectedGroup.toString() + "'?");
-        alert.setContentText("If you are the last member, the group will be deleted.");
-        Optional<ButtonType> result = alert.showAndWait();
-        if (result.isPresent() && result.get() == ButtonType.OK) {
-            leaveSelectedGroup(selectedGroup);
-        }
-    }
-
-    private void handleAddMember() {
-        GroupDto selectedGroup = userListView.getSelectionModel().getSelectedItem();
-        if (selectedGroup != null) {
-            openAddMemberDialog(selectedGroup);
-        }
-    }
-
-    private void openAddMemberDialog(GroupDto group) {
-        try {
-            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/AddMemberView.fxml"));
-            Stage stage = new Stage();
-            stage.setTitle("Add Members");
-            stage.initModality(Modality.APPLICATION_MODAL);
-            stage.setScene(new Scene(fxmlLoader.load(), 350, 400));
-            AddMemberController addMemberController = fxmlLoader.getController();
-            addMemberController.initData(group);
-            stage.showAndWait();
-        } catch (IOException e) {
-            e.printStackTrace();
-            showErrorAlert("UI Error", "Could not open the Add Member window.");
-        }
-    }
-
-    private void leaveSelectedGroup(GroupDto groupToLeave) {
-        new Thread(() -> {
-            try {
-                groupService.leaveGroup(groupToLeave.id(), getCurrentUserId());
-                Platform.runLater(() -> userListView.getItems().remove(groupToLeave));
-            } catch (Exception e) {
-                e.printStackTrace();
-                Platform.runLater(() -> showErrorAlert("Error", "Failed to leave the group."));
-            }
-        }).start();
-    }
-
-    public void initData() {
-        loadUserGroups();
-    }
-
-    @FXML
-    private void handleNewChatAction() {
-        try {
-            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/NewChatView.fxml"));
-            Stage stage = new Stage();
-            stage.setTitle("Start New Chat");
-            stage.initModality(Modality.APPLICATION_MODAL);
-            stage.setScene(new Scene(fxmlLoader.load(), 400, 500));
-            NewChatController newChatController = fxmlLoader.getController();
-            newChatController.setParentController(this);
-            stage.showAndWait();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    @FXML
-    private void handleCreateGroupAction() {
-        try {
-            FXMLLoader fxmlLoader = new FXMLLoader(MainApplication.class.getResource("fxml/CreateGroupView.fxml"));
-            Stage stage = new Stage();
-            stage.setTitle("Create New Group");
-            stage.initModality(Modality.APPLICATION_MODAL);
-            stage.setScene(new Scene(fxmlLoader.load(), 350, 400));
-            CreateGroupController createGroupController = fxmlLoader.getController();
-            createGroupController.setParentController(this);
-            stage.showAndWait();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
     private void connectAndCheckStatus() {
